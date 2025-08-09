@@ -59,7 +59,7 @@ users:
     shell: /bin/bash
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh-authorized-keys:
-      - {{ env "SSH_PUBLIC_KEY" }}
+      - {{ (datasource "env").SSH_PUBLIC_KEY }}
 
 # System configuration
 write_files:
@@ -72,8 +72,8 @@ write_files:
   - path: /home/ubuntu/.gitconfig
     content: |
       [user]
-          name = {{ env "GIT_NAME" }}
-          email = {{ env "GIT_EMAIL" }}
+          name = {{ (datasource "env").GIT_NAME }}
+          email = {{ (datasource "env").GIT_EMAIL }}
       [core]
           editor = vim
           pager = less

@@ -103,16 +103,32 @@ install-make:
 	@echo "Make installation complete!"
 
 # Install gomplate only
+# install-gomplate:
+# 	@echo "Installing gomplate..."
+# 	@if command -v gomplate >/dev/null 2>&1; then \
+# 		echo "gomplate already installed: $$(gomplate --version)"; \
+# 	else \
+# 		if [ "$$(uname)" = "Darwin" ]; then \
+# 			brew install gomplate; \
+# 		else \
+# 			# For Linux, download binary directly
+# 			curl -sSL https://github.com/hairyhenderson/gomplate/releases/download/$(GOMPLATE_VERSION)/gomplate_$(GOMPLATE_VERSION)_linux_$(uname -m).tar.gz | tar -xz -C /tmp/; \
+# 			sudo mv /tmp/gomplate /usr/local/bin/; \
+# 			rm -f /tmp/gomplate.1; \
+# 		fi; \
+# 	fi;
+# 	@echo "gomplate installation complete!"
+
 install-gomplate:
 	@echo "Installing gomplate..."
 	@if command -v gomplate >/dev/null 2>&1; then \
 		echo "gomplate already installed: $$(gomplate --version)"; \
 	else \
-		if [[ "$$(uname)" == "Darwin" ]]; then \
+		uname_value=$$(uname); \
+		if [ "$$uname_value" = "Darwin" ]; then \
 			brew install gomplate; \
 		else \
-			# For Linux, download binary directly
-			curl -sSL https://github.com/hairyhenderson/gomplate/releases/download/$(GOMPLATE_VERSION)/gomplate_$(GOMPLATE_VERSION)_linux_$(uname -m).tar.gz | tar -xz -C /tmp/; \
+			curl -sSL https://github.com/hairyhenderson/gomplate/releases/download/$(GOMPLATE_VERSION)/gomplate_$(GOMPLATE_VERSION)_linux_$$(uname -m).tar.gz | tar -xz -C /tmp/; \
 			sudo mv /tmp/gomplate /usr/local/bin/; \
 			rm -f /tmp/gomplate.1; \
 		fi; \
@@ -170,7 +186,6 @@ quick-setup:
 	@echo "6. Run 'make create-base-image' to create VM base image"
 	@echo "7. Run 'make info' to check system status"
 
-# Create base VM image using rendered template
 create-base-image:
 	@echo "Creating base VM image..."
 	@if [ ! -f templates/cloud-init.yaml ]; then \
@@ -179,21 +194,22 @@ create-base-image:
 	fi
 	@echo "Using configuration from templates/cloud-init.yaml"
 	@if [ -f ".env" ]; then \
-		source .env; \
-		VM_NAME="$${VM_NAME:-python-template}"; \
+		set -a; source .env; set +a; \
+		VM_NAME="$${VM_NAME}"; \
 	else \
 		VM_NAME="python-template"; \
-	fi
-	@echo "VM name: $$VM_NAME"
-	@echo ""
-	@echo "To create the VM, run:"
-	@echo "  multipass launch --name $$VM_NAME --cloud-init templates/cloud-init.yaml"
-	@echo ""
-	@echo "Then wait for cloud-init to complete:"
-	@echo "  multipass exec $$VM_NAME -- cloud-init status --wait"
-	@echo ""
-	@echo "Finally, create a snapshot:"
-	@echo "  multipass snapshot $$VM_NAME --name golden-image"
+	fi; \
+	echo "VM name: $$VM_NAME"; \
+	echo ""; \
+	echo "To create the VM, run:"; \
+	echo "  multipass launch --name $$VM_NAME --cloud-init templates/cloud-init.yaml"; \
+	echo ""; \
+	echo "Then wait for cloud-init to complete:"; \
+	echo "  multipass exec $$VM_NAME -- cloud-init status --wait"; \
+	echo ""; \
+	echo "Finally, create a snapshot:"; \
+	echo "  multipass snapshot $$VM_NAME --name golden-image"
+
 
 # List all VMs
 list-vms:
@@ -238,13 +254,13 @@ list-templates:
 
 # Copy a template to use
 copy-template:
-	@if [[ -z "$(TEMPLATE)" ]]; then \
+	@if [ -z "$(TEMPLATE)" ]; then \
 		echo "Error: TEMPLATE variable is required."; \
 		echo "Available templates:"; \
 		make list-templates; \
 		exit 1; \
 	fi
-	@if [[ ! -f "template-examples/cloud-init-$(TEMPLATE).tmpl" ]]; then \
+	@if [ ! -f "template-examples/cloud-init-$(TEMPLATE).tmpl" ]; then \
 		echo "Error: Template '$(TEMPLATE)' not found."; \
 		echo "Available templates:"; \
 		make list-templates; \
@@ -252,7 +268,7 @@ copy-template:
 	fi
 	@echo "Copying template '$(TEMPLATE)' to templates/..."
 	@cp "template-examples/cloud-init-$(TEMPLATE).tmpl" "templates/cloud-init.tmpl"
-	@if [[ -f "template-examples/.env.$(TEMPLATE).example" ]]; then \
+	@if [ -f "template-examples/.env.$(TEMPLATE).example" ]; then \
 		cp "template-examples/.env.$(TEMPLATE).example" ".env"; \
 		echo "Copied .env.$(TEMPLATE).example to .env"; \
 		echo "Please edit .env with your configuration before rendering."; \
@@ -278,7 +294,7 @@ render-template:
 		exit 1; \
 	fi
 	@echo "Rendering templates/cloud-init.tmpl to templates/cloud-init.yaml..."
-	@gomplate -f templates/cloud-init.tmpl -d .env=.env > templates/cloud-init.yaml
+	@gomplate -f templates/cloud-init.tmpl -d env=.env > templates/cloud-init.yaml
 	@echo "✅ Template rendered successfully: templates/cloud-init.yaml"
 
 # Show help with examples
