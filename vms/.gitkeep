@@ -1,0 +1,2 @@
+# This file ensures the vms directory is kept in version control
+# even when empty. VM instances and related files will be stored here.

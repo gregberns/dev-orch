@@ -1,0 +1,187 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+# System packages
+packages:
+  # Node.js and development tools
+  - nodejs
+  - npm
+  - nodejs-dev
+  - build-essential
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - tree
+  - tmux
+  - zsh
+
+  # Container runtime
+  - podman
+  - podman-compose
+  - containers-podman
+
+  # Development tools
+  - make
+  - cmake
+  - gcc
+  - g++
+  - clang
+  - llvm
+  - gdb
+  - valgrind
+
+  # Networking tools
+  - net-tools
+  - iproute2
+  - dnsutils
+  - telnet
+  - nmap
+
+  # System monitoring
+  - sysstat
+  - iotop
+  - iftop
+
+  # Text processing
+  - jq
+  - yq
+  - ripgrep
+  - fd-find
+
+# User configuration
+users:
+  - name: ubuntu
+    groups: sudo, docker, systemd-journal
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh-authorized-keys:
+      - {{ env "SSH_PUBLIC_KEY" }}
+
+# System configuration
+write_files:
+  # Node.js configuration
+  - path: /home/ubuntu/.nvmrc
+    content: "20.x"
+    owner: ubuntu:ubuntu
+
+  # Git configuration
+  - path: /home/ubuntu/.gitconfig
+    content: |
+      [user]
+          name = {{ env "GIT_NAME" }}
+          email = {{ env "GIT_EMAIL" }}
+      [core]
+          editor = vim
+          pager = less
+          autocrlf = input
+      [color]
+          ui = auto
+      [push]
+          default = current
+      [pull]
+          rebase = true
+      [alias]
+          st = status
+          co = checkout
+          br = branch
+          ci = commit
+          pu = push
+          pl = pull
+          df = diff
+          lg = log --oneline --graph --decorate --all
+          lol = log --oneline
+          lola = log --oneline --graph --decorate --all
+    owner: ubuntu:ubuntu
+
+  # Node.js global packages configuration
+  - path: /home/ubuntu/.npmrc
+    content: |
+      prefix = /home/ubuntu/.npm-global
+      progress = false
+      depth = 0
+      color = false
+    owner: ubuntu:ubuntu
+
+  # Podman configuration
+  - path: /home/ubuntu/.config/containers/containers.conf
+    content: |
+      [containers]
+      env = ["TERM=xterm-256color"]
+
+      [engine]
+      runtime = "crun"
+      events_logger = "journald"
+      cgroup_manager = "cgroupfs"
+      [engine.runtimes]
+      [engine.runtimes.crun]
+      command = ["crun"]
+    owner: ubuntu:ubuntu
+    create_dirs: true
+
+# Runtime commands
+runcmd:
+  # Install NVM (Node Version Manager)
+  - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+  # Install Node.js and npm
+  - export NVM_DIR="$HOME/.nvm"
+  - source "$NVM_DIR/nvm.sh"
+  - nvm install 20
+  - nvm use 20
+  - nvm alias default 20
+
+  # Add NVM to bash profile
+  - echo 'export NVM_DIR="$HOME/.nvm"' >> /home/ubuntu/.bashrc
+  - echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> /home/ubuntu/.bashrc
+  - echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> /home/ubuntu/.bashrc
+
+  # Enable podman socket for rootless operation
+  - systemctl --user enable podman.socket --now
+  - loginctl enable-linger ubuntu
+
+  # Create workspace directory
+  - mkdir -p /home/ubuntu/workspace
+  - chown ubuntu:ubuntu /home/ubuntu/workspace
+
+  # Setup development directories
+  - mkdir -p /home/ubuntu/dev
+  - mkdir -p /home/ubuntu/projects
+  - mkdir -p /home/ubuntu/src
+  - chown -R ubuntu:ubuntu /home/ubuntu/{dev,projects,src}
+
+  # Install Node.js global packages
+  - export NVM_DIR="$HOME/.nvm"
+  - source "$NVM_DIR/nvm.sh"
+  - npm install -g npm@latest
+  - npm install -g yarn@latest
+  - npm install -g pnpm@latest
+  - npm install -g @vue/cli@latest
+  - npm install -g create-react-app@latest
+  - npm install -g @angular/cli@latest
+  - npm install -g typescript@latest
+  - npm install -g ts-node@latest
+  - npm install -g nodemon@latest
+  - npm install -g pm2@latest
+  - npm install -g eslint@latest
+  - npm install -g prettier@latest
+  - npm install -g @commitlint/cli@latest
+  - npm install -g @commitlint/config-conventional@latest
+
+  # Setup bash completion
+  - curl -L https://raw.githubusercontent.com/docker/compose/1.29.6/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
+  - curl -L https://raw.githubusercontent.com/scop/bash-completion/master/README.md > /etc/bash_completion.d/README.md
+
+  # Update system packages
+  - apt update && apt upgrade -y && apt clean
+
+  # Remove unnecessary packages
+  - apt autoremove -y
+
+  # Clean up apt cache
+  - rm -rf /var/lib/apt/lists/*
+
+# Final message
+final_message: "Node.js developer environment setup complete! Node.js, npm, yarn, and development tools are ready."
