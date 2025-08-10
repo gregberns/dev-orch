@@ -210,6 +210,9 @@ create-base-image:
 	echo "Finally, create a snapshot:"; \
 	echo "  multipass snapshot $$VM_NAME --name golden-image"
 
+transfer-ssh:
+	@echo "Transfering local SSH key to VM"
+	@multipass transfer ~/.ssh/id_rsa $$VM_NAME:/home/ubuntu/.ssh/
 
 # List all VMs
 list-vms:
