@@ -52,6 +52,26 @@ packages:
   - ripgrep
   - fd-find
 
+  # Application specific
+  - gdal-bin
+  - libgdal-dev
+  - postgresql-client-16
+  # Install PostGIS client tools (like shp2pgsql) and the actual extension
+  # for PostgreSQL 16. This avoids pulling in the full server.
+  - postgis
+  - postgresql-16-postgis-3
+
+# Apt configuration to avoid installing recommended packages (like postgresql server)
+apt:
+  preserve_sources_list: true
+  sources:
+    docker.list:
+      source: "deb [arch=amd64] https://download.docker.com/linux/ubuntu $RELEASE stable"
+      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+  conf: |
+    APT::Install-Recommends "0";
+    APT::Install-Suggests "0";
+
 # User configuration
 users:
   - name: ubuntu
@@ -117,7 +137,7 @@ write_files:
 runcmd:
   # Setup Python environment with UV
   - curl -LsSf https://astral.sh/uv/install.sh | sh
-  - export PATH="$HOME/.cargo/bin:$PATH"
+  # - export PATH="$HOME/.cargo/bin:$PATH"
 
   # Enable podman socket for rootless operation
   - systemctl --user enable podman.socket --now
@@ -133,21 +153,32 @@ runcmd:
   - mkdir -p /home/ubuntu/src
   - chown -R ubuntu:ubuntu /home/ubuntu/{dev,projects,src}
 
+  # Ensure ubuntu user owns its home directory
+  - chown -R ubuntu:ubuntu /home/ubuntu
+
   # Initialize Python project with UV
   - su - ubuntu -c "uv init /home/ubuntu/workspace --app"
 
-  # Install system Python packages
+  # # Install system Python packages
   - su - ubuntu -c "uv add --system pip wheel setuptools"
 
-  # Install common development tools
+  # # Install common development tools
   - su - ubuntu -c "uv add --system black isort flake8 mypy pytest pytest-cov bandit safety pre-commit"
 
-  # Install Rust tools
-  - su - ubuntu -c "cargo install cargo-watch cargo-audit cargo-outdated"
+  # Create a default global env
+  # - cd /home/ubuntu/workspace & python3 -m .venv /home/ubuntu/workspace
+  - su - ubuntu -c "python3 -m venv /home/ubuntu/workspace/.venv"
+  - su - ubuntu -c "echo 'source /home/ubuntu/workspace/.venv/bin/activate' >> ~/.bashrc"
+  # Add profile to ensure the bashrc is called
+  - su - ubuntu -c "echo 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi' >> /home/ubuntu/.profile"
+  
+  # Create folder for needed resources
+  - mkdir -p /home/ubuntu/dev/sidegig-api
+  - chown -R ubuntu:ubuntu /home/ubuntu/dev/sidegig-api
 
   # Setup bash completion
-  - curl -L https://raw.githubusercontent.com/docker/compose/1.29.6/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
-  - curl -L https://raw.githubusercontent.com/scop/bash-completion/master/README.md > /etc/bash_completion.d/README.md
+  # - curl -L https://raw.githubusercontent.com/docker/compose/1.29.6/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
+  # - curl -L https://raw.githubusercontent.com/scop/bash-completion/master/README.md > /etc/bash_completion.d/README.md
 
   # Update system packages
   - apt update && apt upgrade -y && apt clean

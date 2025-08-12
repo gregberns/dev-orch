@@ -210,9 +210,32 @@ create-base-image:
 	echo "Finally, create a snapshot:"; \
 	echo "  multipass snapshot $$VM_NAME --name golden-image"
 
+start-vm:
+	@echo "Creating base VM image..."
+# 	@if [ -f ".env" ]; then \
+# 		set -a; source .env; set +a; \
+# 		VM_NAME="$${VM_NAME}"; \
+# 	fi;
+	@echo "VM name: $${VM_NAME}";
+	@multipass launch --name $$VM_NAME --cloud-init templates/cloud-init.yaml
+
 transfer-ssh:
 	@echo "Transfering local SSH key to VM"
 	@multipass transfer ~/.ssh/id_rsa $$VM_NAME:/home/ubuntu/.ssh/
+
+rebuild-vm:
+	@echo "Delete VM"
+	@multipass delete python-template
+	@echo "Purge VMs"
+	@multipass purge
+	@echo "Launch new model"
+	@multipass launch --name python-template --cloud-init templates/cloud-init.yaml --disk 80G 	
+	@make transfer-ssh VM_NAME=python-template
+	@echo "Copy Dev-Setup script"
+	@multipass transfer ./env-specific/dev-setup.sh python-template:/home/ubuntu/
+	@multipass transfer ./env-specific/.env python-template:/home/ubuntu/dev/sidegig-api
+	@echo "Run the following command to start the shell:"
+	@echo "  > multipass shell python-template"
 
 # List all VMs
 list-vms:
