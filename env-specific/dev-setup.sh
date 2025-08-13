@@ -25,19 +25,67 @@ else
     GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git clone "$REPO_URL"
 fi
 
-# Navigate into the repository's devcontainer directory
-cd "$CLONE_DIR/.devcontainer"
+# # Navigate into the repository's devcontainer directory
+# cd "$CLONE_DIR/.devcontainer"
 
-# Pull the container image(s)
-# This command is naturally idempotent.
-echo "Pulling container images for 'db' service..."
-podman-compose pull db
+# # Pull the container image(s)
+# # This command is naturally idempotent.
+# echo "Pulling container images for 'db' service..."
+# podman-compose pull db
 
-# Navigate back to the project root
-cd ..
+# # Navigate back to the project root
+# cd ..
+
+cd "$CLONE_DIR"
 
 pip install -r requirements.txt
 
+# Should find a better way to get the .env file in here
 cp ~/dev/sidegig-api/.env .env
+
+####
+#### TROUBLESHOOTING
+####
+## PROBLEM: `podman-compose`` fails with "container registry" issue. Check for 
+#
+# tail /etc/containers/registries.conf
+#
+## PROBLEM: If the podman-compose network fails to spin up, check if this lib is installed
+##  There have been issues getting it created
+#
+# which slirp4netns
+#
+## PROBLEM: If the Python process can't connect to the database, then run:
+#
+# podman-compose down -v
+# podman-compose up -d db
+#
+## PROBLEM 
+##   2025-08-13 05:22:22.469 UTC [69] FATAL:  password authentication failed for user "postgres"
+##   2025-08-13 05:22:22.469 UTC [69] DETAIL:  Role "postgres" does not exist.
+##      Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+
+echo "Starting DB Container..."
+cd ~/workspace/sidegig-api/.devcontainer
+
+## FIX IN THE REPO
+# Overwrite the existing db.env - it has spaces before the names
+cat > db.env <<'EOF'
+POSTGRES_DB=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_USER=postgres
+EOF
+
+
+podman-compose up -d db
+cd ..
+
+echo "Start DB migration..."
+python manage.py migrate
+
+echo "Start run python Test ..."
+python manage.py test api.front
+
+
 
 echo "Setup complete."

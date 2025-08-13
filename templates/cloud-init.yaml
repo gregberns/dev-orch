@@ -23,6 +23,8 @@ packages:
   - podman
   - podman-compose
   - containers-podman
+  - uidmap
+  - slirp4netns
 
   # Development tools
   - make
@@ -58,8 +60,8 @@ packages:
   - postgresql-client-16
   # Install PostGIS client tools (like shp2pgsql) and the actual extension
   # for PostgreSQL 16. This avoids pulling in the full server.
-  - postgis
-  - postgresql-16-postgis-3
+  # - postgis
+  # - postgresql-16-postgis-3
 
 # Apt configuration to avoid installing recommended packages (like postgresql server)
 apt:
@@ -133,15 +135,21 @@ write_files:
     owner: ubuntu:ubuntu
     create_dirs: true
 
+  # -- Doesnt seem to work :(
+  # # Podman system configuration to allow pulling from Docker Hub using short names.
+  # - path: /etc/containers/registries.conf
+  #   content: |
+  #     unqualified-search-registries = ["docker.io"]
+
+
 # Runtime commands
 runcmd:
-  # Setup Python environment with UV
-  - curl -LsSf https://astral.sh/uv/install.sh | sh
-  # - export PATH="$HOME/.cargo/bin:$PATH"
-
-  # Enable podman socket for rootless operation
-  - systemctl --user enable podman.socket --now
+  # Enable linger for the ubuntu user so that user services can run in the background.
+  # This is required for the podman user socket to work correctly.
   - loginctl enable-linger ubuntu
+  # Enable and start the podman socket for the ubuntu user.
+  # This must be run as the user, not as root.
+  - su - ubuntu -c "systemctl --user enable podman.socket --now"
 
   # Create workspace directory
   - mkdir -p /home/ubuntu/workspace
@@ -181,13 +189,24 @@ runcmd:
   # - curl -L https://raw.githubusercontent.com/scop/bash-completion/master/README.md > /etc/bash_completion.d/README.md
 
   # Update system packages
-  - apt update && apt upgrade -y && apt clean
+  - apt update && apt upgrade -y 
+
+  # This is not getting installed correctly and is critical to podman networking working  
+  - apt install -y slirp4netns
+
+  - apt clean
 
   # Remove unnecessary packages
   - apt autoremove -y
 
   # Clean up apt cache
   - rm -rf /var/lib/apt/lists/*
+
+  # This is required for Podman to know what repositories to pull from
+  - |
+    cat > /etc/containers/registries.conf <<EOF
+    unqualified-search-registries = ["docker.io"]
+    EOF
 
 # Final message
 final_message: "Golden image setup complete! UV, Podman, and development tools are ready."

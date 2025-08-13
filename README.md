@@ -65,6 +65,50 @@ make render-template
 # Result: cloud-init.yaml
 ```
 
+### Step 02: Run VM
+
+This is the simplest way to get started:
+
+```sh
+make rebuild-vm
+mp shell python-template
+
+# Shelled into the VM
+./dev-setup.sh
+
+# Exit the shell once everything runs
+exit
+
+multipass stop python-template
+
+# Snapshot the instance you just created
+multipass snapshot python-template --name $(date +%F)
+
+# 
+multipass clone python-template <new-vm-name>
+
+## Optional: Restore an existing vm
+multipass restore <vm-name>.<snapshot-name>
+
+```
+
+#### Individual Steps
+
+```sh
+# multipass exec <VM_NAME> -- cloud-init status --wait
+
+multipass exec python-template -- cloud-init status --wait
+```
+
+Transfer your local SSH key to the VM (for git use, etc)
+
+```sh
+make transfer-ssh VM_NAME=python-template
+```
+
+
+
+
 ### Key Components
 
 #### 1. Base Environment Setup (Step 00)
