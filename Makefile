@@ -3,6 +3,12 @@
 
 GOMPLATE_VERSION=v3.11.0
 
+# Load environment variables from .env file if it exists
+ifneq ($(wildcard .env),)
+include .env
+export
+endif
+
 .PHONY: setup verify clean help install-multipass install-make install-gomplate render-template create-base-image list-templates copy-template
 
 # Default target
@@ -384,26 +390,46 @@ kestra-help:
 	@echo "  CONTAINER_CMD     - The container command to use (podman or docker, default: $(CONTAINER_CMD))"
 
 kestra-validate:
-	@if [ -z "$(KESTRA_USER)" ] || [ -z "$(KESTRA_PASSWORD)" ]; then \
-		echo "❌ Error: KESTRA_USER and KESTRA_PASSWORD environment variables must be set."; \
+	@echo "--- Kestra Validation Debug ---"
+	@echo "Checking environment variables..."
+	@if [ -z "$(KESTRA_USER)" ] || [ -z "$(KESTRA_PASSWORD)" ] || [ -z "$(KESTRA_SERVER_URL)" ] || [ -z "$(CONTAINER_CMD)" ] || [ -z "$(KESTRA_CONTAINER_NAME)" ]; then \
+		echo "❌ Error: One or more required environment variables are not set."; \
+		echo "   KESTRA_USER: $(KESTRA_USER)"; \
+		echo "   KESTRA_PASSWORD: $(if $(KESTRA_PASSWORD),set,not set)"; \
+		echo "   KESTRA_SERVER_URL: $(KESTRA_SERVER_URL)"; \
+		echo "   CONTAINER_CMD: $(CONTAINER_CMD)"; \
+		echo "   KESTRA_CONTAINER_NAME: $(KESTRA_CONTAINER_NAME)"; \
 		make kestra-help; \
 		exit 1; \
+	else \
+		echo "✅ All required environment variables are set."; \
 	fi
+	@echo "KESTRA_SERVER_URL: $(KESTRA_SERVER_URL)"
+	@echo "CONTAINER_CMD: $(CONTAINER_CMD)"
+	@echo "KESTRA_CONTAINER_NAME: $(KESTRA_CONTAINER_NAME)"
+	@echo "---------------------------------"
+	@echo ""
 	@echo "Validating all flows in ./kestra-flows..."
 	@find ./kestra-flows -name '*.yaml' -o -name '*.yml' | while read flow_file; do \
-		echo "--> Validating $$flow_file"; \
-		$(CONTAINER_CMD) exec $(KESTRA_CONTAINER_NAME) ./kestra flow validate "$$flow_file" \
-			--server $(KESTRA_SERVER_URL) --user "$(KESTRA_USER):$(KESTRA_PASSWORD)"; \
+		container_flow_path=$$(echo "$$flow_file" | sed 's|^\./kestra-flows|/app/flows|'); \
+		echo "--> Validating $$container_flow_path in container..."; \
+		CMD_TO_RUN="/app/kestra flow validate \"$$container_flow_path\" --server \"$(KESTRA_SERVER_URL)\" --user \"$(KESTRA_USER):$(KESTRA_PASSWORD)\""; \
+		$(CONTAINER_CMD) exec $(KESTRA_CONTAINER_NAME) sh -c "$$CMD_TO_RUN"; \
 	done
 	@echo "✅ All flows validated successfully."
 
 kestra-deploy:
-	@if [ -z "$(KESTRA_USER)" ] || [ -z "$(KESTRA_PASSWORD)" ]; then \
-		echo "❌ Error: KESTRA_USER and KESTRA_PASSWORD environment variables must be set."; \
+	@if [ -z "$(KESTRA_USER)" ] || [ -z "$(KESTRA_PASSWORD)" ] || [ -z "$(KESTRA_SERVER_URL)" ] || [ -z "$(CONTAINER_CMD)" ] || [ -z "$(KESTRA_CONTAINER_NAME)" ]; then \
+		echo "❌ Error: One or more required Kestra environment variables are not set."; \
+		echo "   KESTRA_USER: $(KESTRA_USER)"; \
+		echo "   KESTRA_PASSWORD: $(if $(KESTRA_PASSWORD),set,not set)"; \
+		echo "   KESTRA_SERVER_URL: $(KESTRA_SERVER_URL)"; \
+		echo "   CONTAINER_CMD: $(CONTAINER_CMD)"; \
+		echo "   KESTRA_CONTAINER_NAME: $(KESTRA_CONTAINER_NAME)"; \
 		make kestra-help; \
 		exit 1; \
 	fi
-	@echo "Deploying all flows from ./kestra-flows to namespace '$(KESTRA_NAMESPACE)'..."
-	$(CONTAINER_CMD) exec $(KESTRA_CONTAINER_NAME) ./kestra flow namespace update $(KESTRA_NAMESPACE) ./kestra-flows \
-		--no-delete --server $(KESTRA_SERVER_URL) --user "$(KESTRA_USER):$(KESTRA_PASSWORD)"
+	@echo "Deploying all flows from /app/flows to namespace '$(KESTRA_NAMESPACE)'..."
+	CMD_TO_RUN="/app/kestra flow namespace update $(KESTRA_NAMESPACE) /app/flows --no-delete --server $(KESTRA_SERVER_URL) --user '$(KESTRA_USER):$(KESTRA_PASSWORD)'"; \
+	$(CONTAINER_CMD) exec $(KESTRA_CONTAINER_NAME) sh -c "$$CMD_TO_RUN";
 	@echo "✅ Deployment complete."

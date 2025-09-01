@@ -1,5 +1,5 @@
 id: environment-orchestration
-namespace: devops
+namespace: dev.orch
 description: Workflow for orchestrating environment provisioning and management
 
 inputs:
@@ -8,7 +8,7 @@ inputs:
     description: Name of the environment to manage (e.g., dev, staging, prod)
     required: true
   - id: action
-    type: STRING
+    type: ENUM
     description: Action to perform (start, stop, status)
     defaults: "status"
     values:
@@ -18,7 +18,7 @@ inputs:
 
 tasks:
   - id: validate-inputs
-    type: io.kestra.plugin.core.script.Script
+    type: io.kestra.plugin.scripts.shell.Script
     containerImage: alpine:latest
     script: |
       echo "Environment: {{ inputs.environment_name }}"
@@ -35,61 +35,50 @@ tasks:
     type: io.kestra.plugin.core.flow.Switch
     value: "{{ inputs.action }}"
     cases:
-      - id: start-case
-        conditions:
-          - "{{ inputs.action == 'start' }}"
-        tasks:
-          - id: start-environment
-            type: io.kestra.plugin.core.log.Log
-            message: "Starting environment: {{ inputs.environment_name }}"
-          - id: simulate-start
-            type: io.kestra.plugin.core.script.Script
-            containerImage: alpine:latest
-            script: |
-              echo "Simulating environment startup..."
-              sleep 2
-              echo "Environment '{{ inputs.environment_name }}' started successfully"
-              echo "Services: web-server, database, cache"
-              echo "Status: Running"
-
-      - id: stop-case
-        conditions:
-          - "{{ inputs.action == 'stop' }}"
-        tasks:
-          - id: stop-environment
-            type: io.kestra.plugin.core.log.Log
-            message: "Stopping environment: {{ inputs.environment_name }}"
-          - id: simulate-stop
-            type: io.kestra.plugin.core.script.Script
-            containerImage: alpine:latest
-            script: |
-              echo "Simulating environment shutdown..."
-              sleep 2
-              echo "Environment '{{ inputs.environment_name }}' stopped successfully"
-              echo "All services terminated"
-
-      - id: status-case
-        conditions:
-          - "{{ inputs.action == 'status' }}"
-        tasks:
-          - id: check-status
-            type: io.kestra.plugin.core.log.Log
-            message: "Checking status of environment: {{ inputs.environment_name }}"
-          - id: simulate-status
-            type: io.kestra.plugin.core.script.Script
-            containerImage: alpine:latest
-            script: |
-              echo "Simulating status check..."
-              sleep 1
-              echo "Environment Status Report for '{{ inputs.environment_name }}':"
-              echo "=============================================="
-              echo "Web Server: Running (PID: 12345)"
-              echo "Database: Running (PID: 12346)"
-              echo "Cache: Running (PID: 12347)"
-              echo "Memory Usage: 65%"
-              echo "CPU Usage: 23%"
-              echo "Uptime: 2h 15m"
-              echo "=============================================="
+      start:
+        - id: start-environment
+          type: io.kestra.plugin.core.log.Log
+          message: "Starting environment: {{ inputs.environment_name }}"
+        - id: simulate-start
+          type: io.kestra.plugin.scripts.shell.Script
+          containerImage: alpine:latest
+          script: |
+            echo "Simulating environment startup..."
+            sleep 2
+            echo "Environment '{{ inputs.environment_name }}' started successfully"
+            echo "Services: web-server, database, cache"
+            echo "Status: Running"
+      stop:
+        - id: stop-environment
+          type: io.kestra.plugin.core.log.Log
+          message: "Stopping environment: {{ inputs.environment_name }}"
+        - id: simulate-stop
+          type: io.kestra.plugin.scripts.shell.Script
+          containerImage: alpine:latest
+          script: |
+            echo "Simulating environment shutdown..."
+            sleep 2
+            echo "Environment '{{ inputs.environment_name }}' stopped successfully"
+            echo "All services terminated"
+      status:
+        - id: check-status
+          type: io.kestra.plugin.core.log.Log
+          message: "Checking status of environment: {{ inputs.environment_name }}"
+        - id: simulate-status
+          type: io.kestra.plugin.scripts.shell.Script
+          containerImage: alpine:latest
+          script: |
+            echo "Simulating status check..."
+            sleep 1
+            echo "Environment Status Report for '{{ inputs.environment_name }}':"
+            echo "=============================================="
+            echo "Web Server: Running (PID: 12345)"
+            echo "Database: Running (PID: 12346)"
+            echo "Cache: Running (PID: 12347)"
+            echo "Memory Usage: 65%"
+            echo "CPU Usage: 23%"
+            echo "Uptime: 2h 15m"
+            echo "=============================================="
 
   - id: completion
     type: io.kestra.plugin.core.log.Log

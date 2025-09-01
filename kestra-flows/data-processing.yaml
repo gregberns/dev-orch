@@ -1,5 +1,5 @@
 id: data-processing
-namespace: analytics
+namespace: dev.orch
 description: Data processing workflow with multiple transformation steps
 
 inputs:
@@ -8,7 +8,7 @@ inputs:
     description: Path to the source data file
     defaults: "/data/input.csv"
   - id: output_format
-    type: STRING
+    type: ENUM
     description: Output format (json, csv, parquet)
     defaults: "json"
     values:
@@ -20,12 +20,12 @@ tasks:
   - id: download-data
     type: io.kestra.plugin.core.http.Download
     uri: https://huggingface.co/datasets/kestra/datasets/raw/main/csv/orders.csv
-    outputFiles:
-      - orders.csv
 
   - id: validate-data
-    type: io.kestra.plugin.core.script.Script
+    type: io.kestra.plugin.scripts.shell.Script
     containerImage: python:3.11-slim
+    inputFiles:
+      orders.csv: "{{ outputs['download-data'].uri }}"
     beforeCommands:
       - pip install pandas
     script: |
@@ -52,7 +52,7 @@ tasks:
       validation_results = {
           "total_rows": len(df),
           "columns": list(df.columns),
-          "data_types": df.dtypes.to_dict(),
+          "data_types": {k: str(v) for k, v in df.dtypes.to_dict().items()},
           "missing_values": missing_values.to_dict(),
           "data_quality_score": max(0, 100 - (missing_values.sum() / len(df)) * 100)
       }
@@ -66,103 +66,98 @@ tasks:
     type: io.kestra.plugin.core.flow.Switch
     value: "{{ inputs.output_format }}"
     cases:
-      - id: json-case
-        conditions:
-          - "{{ inputs.output_format == 'json' }}"
-        tasks:
-          - id: transform-to-json
-            type: io.kestra.plugin.core.script.Script
-            containerImage: python:3.11-slim
-            beforeCommands:
-              - pip install pandas
-            script: |
-              import pandas as pd
-              import json
+      json:
+        - id: transform-to-json
+          type: io.kestra.plugin.scripts.shell.Script
+          containerImage: python:3.11-slim
+          inputFiles:
+            orders.csv: "{{ outputs['download-data'].uri }}"
+          beforeCommands:
+            - pip install pandas
+          script: |
+            import pandas as pd
+            import json
 
-              df = pd.read_csv("orders.csv")
+            df = pd.read_csv("orders.csv")
 
-              # Calculate some basic metrics
-              total_sales = float(df["total"].sum())
-              avg_order_value = float(df["total"].mean())
-              unique_customers = int(df["customer_id"].nunique())
-              top_product = df.groupby("product_id")["quantity"].sum().idxmax()
+            # Calculate some basic metrics
+            total_sales = float(df["total"].sum())
+            avg_order_value = float(df["total"].mean())
+            unique_customers = int(df["customer_id"].nunique())
+            top_product = df.groupby("product_id")["quantity"].sum().idxmax()
 
-              # Transform to structured JSON
-              transformed_data = {
-                  "metadata": {
-                      "source": "orders.csv",
-                      "processing_date": "{{ now() }}",
-                      "total_records": len(df)
-                  },
-                  "summary": {
-                      "total_sales": round(total_sales, 2),
-                      "average_order_value": round(avg_order_value, 2),
-                      "unique_customers": unique_customers,
-                      "top_product_id": int(top_product)
-                  },
-                  "data": df.to_dict("records")
-              }
+            # Transform to structured JSON
+            transformed_data = {
+                "metadata": {
+                    "source": "orders.csv",
+                    "processing_date": "{{ now() }}",
+                    "total_records": len(df)
+                },
+                "summary": {
+                    "total_sales": round(total_sales, 2),
+                    "average_order_value": round(avg_order_value, 2),
+                    "unique_customers": unique_customers,
+                    "top_product_id": int(top_product)
+                },
+                "data": df.to_dict("records")
+            }
 
-              with open("transformed_data.json", "w") as f:
-                  json.dump(transformed_data, f, indent=2)
+            with open("transformed_data.json", "w") as f:
+                json.dump(transformed_data, f, indent=2)
 
-              print("Data transformed to JSON format")
+            print("Data transformed to JSON format")
+      csv:
+        - id: transform-to-csv
+          type: io.kestra.plugin.scripts.shell.Script
+          containerImage: python:3.11-slim
+          inputFiles:
+            orders.csv: "{{ outputs['download-data'].uri }}"
+          beforeCommands:
+            - pip install pandas
+          script: |
+            import pandas as pd
 
-      - id: csv-case
-        conditions:
-          - "{{ inputs.output_format == 'csv' }}"
-        tasks:
-          - id: transform-to-csv
-            type: io.kestra.plugin.core.script.Script
-            containerImage: python:3.11-slim
-            beforeCommands:
-              - pip install pandas
-            script: |
-              import pandas as pd
+            df = pd.read_csv("orders.csv")
 
-              df = pd.read_csv("orders.csv")
+            # Add calculated columns
+            df['order_value_per_item'] = df['total'] / df['quantity']
+            df['profit_margin'] = (df['total'] * 0.3) / df['total']  # Assuming 30% margin
 
-              # Add calculated columns
-              df['order_value_per_item'] = df['total'] / df['quantity']
-              df['profit_margin'] = (df['total'] * 0.3) / df['total']  # Assuming 30% margin
+            # Save transformed CSV
+            df.to_csv("transformed_data.csv", index=False)
 
-              # Save transformed CSV
-              df.to_csv("transformed_data.csv", index=False)
+            print("Data transformed to CSV format")
+      parquet:
+        - id: transform-to-parquet
+          type: io.kestra.plugin.scripts.shell.Script
+          containerImage: python:3.11-slim
+          inputFiles:
+            orders.csv: "{{ outputs['download-data'].uri }}"
+          beforeCommands:
+            - pip install pandas pyarrow
+          script: |
+            import pandas as pd
 
-              print("Data transformed to CSV format")
+            df = pd.read_csv("orders.csv")
 
-      - id: parquet-case
-        conditions:
-          - "{{ inputs.output_format == 'parquet' }}"
-        tasks:
-          - id: transform-to-parquet
-            type: io.kestra.plugin.core.script.Script
-            containerImage: python:3.11-slim
-            beforeCommands:
-              - pip install pandas pyarrow
-            script: |
-              import pandas as pd
+            # Optimize data types for parquet
+            df['customer_id'] = df['customer_id'].astype('int32')
+            df['product_id'] = df['product_id'].astype('int32')
+            df['quantity'] = df['quantity'].astype('int16')
+            df['total'] = df['total'].astype('float32')
 
-              df = pd.read_csv("orders.csv")
+            # Save as parquet
+            df.to_parquet("transformed_data.parquet", index=False)
 
-              # Optimize data types for parquet
-              df['customer_id'] = df['customer_id'].astype('int32')
-              df['product_id'] = df['product_id'].astype('int32')
-              df['quantity'] = df['quantity'].astype('int16')
-              df['total'] = df['total'].astype('float32')
-
-              # Save as parquet
-              df.to_parquet("transformed_data.parquet", index=False)
-
-              print("Data transformed to Parquet format")
+            print("Data transformed to Parquet format")
 
   - id: generate-report
-    type: io.kestra.plugin.core.script.Script
+    type: io.kestra.plugin.scripts.shell.Script
     containerImage: python:3.11-slim
     beforeCommands:
       - pip install pandas
     inputFiles:
-      validation_results.json: "{{ outputs.validate-data.outputFiles['validation_results.json'] }}"
+      validation_results.json: "{{ outputs['validate-data'].outputFiles['validation_results.json'] }}"
     script: |
       import pandas as pd
       import json
@@ -195,15 +190,15 @@ tasks:
       Data Processing Summary:
       - Input: orders.csv
       - Output Format: {{ inputs.output_format }}
-      - Records Processed: {{ outputs.validate-data.outputFiles.validation_results.total_rows }}
-      - Data Quality Score: {{ outputs.validate-data.outputFiles.validation_results.data_quality_score }}
+      - Records Processed: {{ fromJson(read(outputs['validate-data'].outputFiles['validation_results.json'])).total_rows }}
+      - Data Quality Score: {{ fromJson(read(outputs['validate-data'].outputFiles['validation_results.json'])).data_quality_score }}
       - Processing Status: Completed
       - Execution ID: {{ execution.id }}
 
 triggers:
   - id: schedule
     type: io.kestra.plugin.core.trigger.Schedule
-    cron: "0 */6 * * *"  # Run every 6 hours
+    cron: "0 */6 * * *" # Run every 6 hours
 
 errors:
   - id: handle-processing-error

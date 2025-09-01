@@ -1,5 +1,5 @@
 id: hello-world
-namespace: default
+namespace: dev.orch
 description: A simple hello world workflow to test Kestra
 
 inputs:
