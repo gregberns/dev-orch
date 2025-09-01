@@ -1,0 +1,32 @@
+id: hello-world
+namespace: default
+description: A simple hello world workflow to test Kestra
+
+inputs:
+  - id: name
+    type: STRING
+    defaults: "World"
+    description: The name to greet
+
+tasks:
+  - id: greet
+    type: io.kestra.plugin.core.log.Log
+    message: "Hello, {{ inputs.name }}! This is Kestra speaking."
+
+  - id: timestamp
+    type: io.kestra.plugin.core.log.Log
+    message: "Current time: {{ now() }}"
+
+  - id: system-info
+    type: io.kestra.plugin.core.log.Log
+    message: "Execution ID: {{ execution.id }}, Namespace: {{ flow.namespace }}, Flow ID: {{ flow.id }}"
+
+triggers:
+  - id: manual
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: hello-world-trigger
+
+errors:
+  - id: log-error
+    type: io.kestra.plugin.core.log.Log
+    message: "An error occurred in the hello world workflow: {{ execution.errorMessage }}"

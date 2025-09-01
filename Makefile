@@ -18,9 +18,16 @@ help:
 	@echo "  install-gomplate - Install gomplate only"
 	@echo "  help         - Show this help message"
 	@echo ""
+	@echo "Kestra Commands:"
+	@echo "  kestra-help     - Show help for Kestra flow management"
+	@echo "  kestra-validate - Validate all flows in the kestra-flows directory"
+	@echo "  kestra-deploy   - Deploy all flows to the configured Kestra namespace"
+	@echo ""
 	@echo "Example usage:"
 	@echo "  make setup"
 	@echo "  make verify"
+	@echo "  make kestra-validate"
+
 
 # Install all prerequisites
 setup:
@@ -103,22 +110,6 @@ install-make:
 	@echo "Make installation complete!"
 
 # Install gomplate only
-# install-gomplate:
-# 	@echo "Installing gomplate..."
-# 	@if command -v gomplate >/dev/null 2>&1; then \
-# 		echo "gomplate already installed: $$(gomplate --version)"; \
-# 	else \
-# 		if [ "$$(uname)" = "Darwin" ]; then \
-# 			brew install gomplate; \
-# 		else \
-# 			# For Linux, download binary directly
-# 			curl -sSL https://github.com/hairyhenderson/gomplate/releases/download/$(GOMPLATE_VERSION)/gomplate_$(GOMPLATE_VERSION)_linux_$(uname -m).tar.gz | tar -xz -C /tmp/; \
-# 			sudo mv /tmp/gomplate /usr/local/bin/; \
-# 			rm -f /tmp/gomplate.1; \
-# 		fi; \
-# 	fi;
-# 	@echo "gomplate installation complete!"
-
 install-gomplate:
 	@echo "Installing gomplate..."
 	@if command -v gomplate >/dev/null 2>&1; then \
@@ -212,10 +203,6 @@ create-base-image:
 
 start-vm:
 	@echo "Creating base VM image..."
-# 	@if [ -f ".env" ]; then \
-# 		set -a; source .env; set +a; \
-# 		VM_NAME="$${VM_NAME}"; \
-# 	fi;
 	@echo "VM name: $${VM_NAME}";
 	@multipass launch --name $$VM_NAME --cloud-init templates/cloud-init.yaml
 
@@ -229,7 +216,7 @@ rebuild-vm:
 	@echo "Purge VMs"
 	@multipass purge
 	@echo "Launch new model"
-	@multipass launch --name python-template --cloud-init templates/cloud-init.yaml --disk 80G 	
+	@multipass launch --name python-template --cloud-init templates/cloud-init.yaml --disk 80G
 	@make transfer-ssh VM_NAME=python-template
 	@echo "Copy Dev-Setup script"
 	@multipass transfer ./env-specific/dev-setup.sh python-template:/home/ubuntu/
@@ -359,3 +346,64 @@ help-examples:
 	@echo "  make clean                    # Clean up host environment"
 	@echo "  make help                     # Show basic help"
 	@echo "  make help-examples            # Show this extended help"
+
+# ==============================================================================
+# Kestra Flow Management
+# ==============================================================================
+
+KESTRA_NAMESPACE ?= dev.orch
+CONTAINER_CMD ?= $(shell command -v podman || command -v docker)
+KESTRA_CONTAINER_NAME = kestra
+KESTRA_SERVER_URL = http://localhost:8080
+
+.PHONY: kestra-help kestra-validate kestra-deploy
+
+kestra-help:
+	@echo "Kestra Flow Management Commands"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make kestra-validate"
+	@echo "  make kestra-deploy [KESTRA_NAMESPACE=my.namespace]"
+	@echo ""
+	@echo "Description:"
+	@echo "  These commands use the Kestra CLI running inside the Docker container to manage your flows."
+	@echo "  They require KESTRA_USER and KESTRA_PASSWORD to be set in your environment."
+	@echo ""
+	@echo "Prerequisites:"
+	@echo "  1. The Kestra Docker containers must be running ('podman-compose up -d')."
+	@echo "  2. You must have the user and password for the Kestra instance."
+	@echo "     - The default credentials in 'kestra.yml' are kestra:password."
+	@echo "     - For security, add these to a local .env file (already in .gitignore):"
+	@echo "         KESTRA_USER=kestra"
+	@echo "         KESTRA_PASSWORD=password"
+	@echo "     - Then, load the variables into your shell:"
+	@echo "         source .env"
+	@echo ""
+	@echo "Variables:"
+	@echo "  KESTRA_NAMESPACE  - The namespace to deploy flows to (default: $(KESTRA_NAMESPACE))"
+	@echo "  CONTAINER_CMD     - The container command to use (podman or docker, default: $(CONTAINER_CMD))"
+
+kestra-validate:
+	@if [ -z "$(KESTRA_USER)" ] || [ -z "$(KESTRA_PASSWORD)" ]; then \
+		echo "❌ Error: KESTRA_USER and KESTRA_PASSWORD environment variables must be set."; \
+		make kestra-help; \
+		exit 1; \
+	fi
+	@echo "Validating all flows in ./kestra-flows..."
+	@find ./kestra-flows -name '*.yaml' -o -name '*.yml' | while read flow_file; do \
+		echo "--> Validating $$flow_file"; \
+		$(CONTAINER_CMD) exec $(KESTRA_CONTAINER_NAME) ./kestra flow validate "$$flow_file" \
+			--server $(KESTRA_SERVER_URL) --user "$(KESTRA_USER):$(KESTRA_PASSWORD)"; \
+	done
+	@echo "✅ All flows validated successfully."
+
+kestra-deploy:
+	@if [ -z "$(KESTRA_USER)" ] || [ -z "$(KESTRA_PASSWORD)" ]; then \
+		echo "❌ Error: KESTRA_USER and KESTRA_PASSWORD environment variables must be set."; \
+		make kestra-help; \
+		exit 1; \
+	fi
+	@echo "Deploying all flows from ./kestra-flows to namespace '$(KESTRA_NAMESPACE)'..."
+	$(CONTAINER_CMD) exec $(KESTRA_CONTAINER_NAME) ./kestra flow namespace update $(KESTRA_NAMESPACE) ./kestra-flows \
+		--no-delete --server $(KESTRA_SERVER_URL) --user "$(KESTRA_USER):$(KESTRA_PASSWORD)"
+	@echo "✅ Deployment complete."

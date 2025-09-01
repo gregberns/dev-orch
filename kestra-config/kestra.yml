@@ -1,0 +1,51 @@
+# Kestra Configuration for Docker Compose
+# This file uses the official configuration structure provided in the documentation.
+
+# 1. Define all data sources (like our PostgreSQL database) here.
+datasources:
+  postgres:
+    url: jdbc:postgresql://postgres:5432/kestra
+    driverClassName: org.postgresql.Driver
+    username: kestra
+    password: supersecure # This must match the password in docker-compose.yaml
+
+# 2. Configure Kestra itself.
+kestra:
+  # The URL where the Kestra UI is accessible. This is important for generating correct links.
+  url: "http://localhost:8080"
+
+  # 3. Configure the repository to use the 'postgres' data source defined above.
+  repository:
+    type: postgres
+
+  # 4. Configure the queue to also use the 'postgres' data source.
+  queue:
+    type: postgres
+
+  # 5. Configure internal storage to use the local filesystem via a Docker volume.
+  storage:
+    type: local
+    local:
+      basePath: "/app/data" # This path is a volume mount in docker-compose.yaml
+
+  # 6. Enable basic authentication for CLI access.
+  server:
+    basicAuth:
+      enabled: true
+      # These are the default credentials for local development.
+      # The CLI will use KESTRA_USER and KESTRA_PASSWORD env vars.
+      users:
+        - username: admin
+          password: Kestra12
+
+  # Define where Kestra should store temporary files for tasks.
+  tasks:
+    tmpDir:
+      path: "/tmp"
+
+  # Load plugins needed for our project.
+  plugins:
+    # We will need the shell scripts plugin to interact with Multipass.
+    - io.kestra.plugin.scripts.shell:latest
+    # Git plugin is useful for checking out code.
+    - io.kestra.plugin.git:latest
