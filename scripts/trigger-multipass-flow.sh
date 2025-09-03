@@ -36,7 +36,7 @@ FLOW_ID="multipass-vm-lifecycle"
 KESTRA_EXECUTION_URL="${KESTRA_SERVER_URL}/api/v1/executions/${KESTRA_NAMESPACE}/${FLOW_ID}"
 
 # Input parameters
-BASE_IMAGE_NAME="python-template"
+TEMPLATE_INSTANCE_NAME="python-template"
 WORKLOAD_COMMAND="ls -la"
 DEBUG_MODE=false
 VM_CPUS=2
@@ -50,7 +50,7 @@ echo "URL: $KESTRA_EXECUTION_URL"
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
   --user "$KESTRA_USER:$KESTRA_PASSWORD" \
   -H "Content-Type: multipart/form-data" \
-  -F "base_image_name=$BASE_IMAGE_NAME" \
+  -F "template_instance_name=$TEMPLATE_INSTANCE_NAME" \
   -F "workload_command=$WORKLOAD_COMMAND" \
   -F "debug_mode=$DEBUG_MODE" \
   -F "vm_cpus=$VM_CPUS" \

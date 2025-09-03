@@ -3,9 +3,9 @@ namespace: dev.orch
 description: A flow to launch a Multipass VM from a base image, execute a command, and then destroy the VM.
 
 inputs:
-  - id: base_image_name
+  - id: template_instance_name
     type: STRING
-    description: The name of the Multipass golden image to launch (e.g., ubuntu-lts-agent).
+    description: The name of the Multipass template instance to clone (e.g., python-template).
     required: true
   - id: workload_command
     type: STRING
@@ -35,9 +35,9 @@ tasks:
 
   - id: launch_params
     type: io.kestra.plugin.core.log.Log
-    message: "image_name: {{ inputs.base_image_name }} --name {{ outputs.generate_vm_name.value }} --cpus {{ inputs.vm_cpus }} --memory {{ inputs.vm_memory }} --disk {{ inputs.vm_disk }}"
+    message: "image_name: {{ inputs.template_instance_name }} --name {{ outputs.generate_vm_name.value }} --cpus {{ inputs.vm_cpus }} --memory {{ inputs.vm_memory }} --disk {{ inputs.vm_disk }}"
 
-  - id: launch_vm
+  - id: clone_and_start_vm
     type: io.kestra.plugin.fs.ssh.Command
     authMethod: PUBLIC_KEY
     host: "{{ secret('MULTIPASS_HOST') }}"
@@ -45,7 +45,8 @@ tasks:
     privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
     commands:
       - /usr/local/bin/multipass ls
-      - /usr/local/bin/multipass launch {{ inputs.base_image_name }} --name {{ outputs.generate_vm_name.value }} --cpus {{ inputs.vm_cpus }} --memory {{ inputs.vm_memory }} --disk {{ inputs.vm_disk }}
+      - /usr/local/bin/multipass clone {{ inputs.template_instance_name }} --name {{ outputs.generate_vm_name.value }}
+      - /usr/local/bin/multipass start {{ outputs.generate_vm_name.value }}
 
   - id: execute_workload
     type: io.kestra.plugin.fs.ssh.Command
@@ -60,14 +61,14 @@ tasks:
     type: io.kestra.plugin.core.flow.If
     condition: "{{ inputs.debug_mode == false }}"
     then:
-      - id: stop_vm_on_success
+      - id: suspend_vm_on_success
         type: io.kestra.plugin.fs.ssh.Command
         authMethod: PUBLIC_KEY
         host: "{{ secret('MULTIPASS_HOST') }}"
         username: "{{ secret('MULTIPASS_SSH_USER') }}"
         privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
         commands:
-          - /usr/local/bin/multipass stop {{ outputs.generate_vm_name.value }} || true
+          - /usr/local/bin/multipass suspend {{ outputs.generate_vm_name.value }} || true
       - id: delete_vm_on_success
         type: io.kestra.plugin.fs.ssh.Command
         authMethod: PUBLIC_KEY
@@ -82,14 +83,14 @@ errors:
     type: io.kestra.plugin.core.flow.If
     condition: "{{ inputs.debug_mode == false }}"
     then:
-      - id: stop_vm_on_failure
+      - id: suspend_vm_on_failure
         type: io.kestra.plugin.fs.ssh.Command
         authMethod: PUBLIC_KEY
         host: "{{ secret('MULTIPASS_HOST') }}"
         username: "{{ secret('MULTIPASS_SSH_USER') }}"
         privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
         commands:
-          - /usr/local/bin/multipass stop {{ outputs.generate_vm_name.value }} || true
+          - /usr/local/bin/multipass suspend {{ outputs.generate_vm_name.value }} || true
       - id: delete_vm_on_failure
         type: io.kestra.plugin.fs.ssh.Command
         authMethod: PUBLIC_KEY
