@@ -31,6 +31,10 @@ services:
     container_name: kestra
     ports:
       - "8080:8080" # Kestra UI and API
+    environment:
+      - SECRET_MULTIPASS_HOST=${SECRET_MULTIPASS_HOST}
+      - SECRET_MULTIPASS_SSH_USER=${SECRET_MULTIPASS_SSH_USER}
+      - SECRET_MULTIPASS_SSH_PRIVATE_KEY=${SECRET_MULTIPASS_SSH_PRIVATE_KEY}
     volumes:
       # This volume is for Kestra's internal storage (e.g., uploaded files).
       - ./data/kestra:/app/data

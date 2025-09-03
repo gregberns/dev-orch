@@ -1,0 +1,100 @@
+id: multipass-vm-lifecycle
+namespace: dev.orch
+description: A flow to launch a Multipass VM from a base image, execute a command, and then destroy the VM.
+
+inputs:
+  - id: base_image_name
+    type: STRING
+    description: The name of the Multipass golden image to launch (e.g., ubuntu-lts-agent).
+    required: true
+  - id: workload_command
+    type: STRING
+    description: The command to be executed inside the newly created VM.
+    required: true
+  - id: debug_mode
+    type: BOOLEAN
+    description: If true, the VM will not be cleaned up after execution for debugging purposes.
+    defaults: false
+  - id: vm_cpus
+    type: INT
+    description: The number of CPUs to allocate to the VM.
+    defaults: 1
+  - id: vm_memory
+    type: STRING
+    description: The amount of memory to allocate (e.g., "512M", "2G").
+    defaults: "1G"
+  - id: vm_disk
+    type: STRING
+    description: The amount of disk space to allocate.
+    defaults: "5G"
+
+tasks:
+  - id: generate_vm_name
+    type: io.kestra.plugin.core.debug.Return
+    format: "kestra-vm-{{ execution.id }}"
+
+  - id: launch_params
+    type: io.kestra.plugin.core.log.Log
+    message: "image_name: {{ inputs.base_image_name }} --name {{ outputs.generate_vm_name.value }} --cpus {{ inputs.vm_cpus }} --memory {{ inputs.vm_memory }} --disk {{ inputs.vm_disk }}"
+
+  - id: launch_vm
+    type: io.kestra.plugin.fs.ssh.Command
+    authMethod: PUBLIC_KEY
+    host: "{{ secret('MULTIPASS_HOST') }}"
+    username: "{{ secret('MULTIPASS_SSH_USER') }}"
+    privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
+    commands:
+      - /usr/local/bin/multipass ls
+      - /usr/local/bin/multipass launch {{ inputs.base_image_name }} --name {{ outputs.generate_vm_name.value }} --cpus {{ inputs.vm_cpus }} --memory {{ inputs.vm_memory }} --disk {{ inputs.vm_disk }}
+
+  - id: execute_workload
+    type: io.kestra.plugin.fs.ssh.Command
+    authMethod: PUBLIC_KEY
+    host: "{{ secret('MULTIPASS_HOST') }}"
+    username: "{{ secret('MULTIPASS_SSH_USER') }}"
+    privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
+    commands:
+      - /usr/local/bin/multipass exec {{ outputs.generate_vm_name.value }} -- {{ inputs.workload_command }}
+
+  - id: cleanup_on_success
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ inputs.debug_mode == false }}"
+    then:
+      - id: stop_vm_on_success
+        type: io.kestra.plugin.fs.ssh.Command
+        authMethod: PUBLIC_KEY
+        host: "{{ secret('MULTIPASS_HOST') }}"
+        username: "{{ secret('MULTIPASS_SSH_USER') }}"
+        privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
+        commands:
+          - /usr/local/bin/multipass stop {{ outputs.generate_vm_name.value }} || true
+      - id: delete_vm_on_success
+        type: io.kestra.plugin.fs.ssh.Command
+        authMethod: PUBLIC_KEY
+        host: "{{ secret('MULTIPASS_HOST') }}"
+        username: "{{ secret('MULTIPASS_SSH_USER') }}"
+        privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
+        commands:
+          - /usr/local/bin/multipass delete {{ outputs.generate_vm_name.value }} --purge || true
+
+errors:
+  - id: cleanup_on_failure
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ inputs.debug_mode == false }}"
+    then:
+      - id: stop_vm_on_failure
+        type: io.kestra.plugin.fs.ssh.Command
+        authMethod: PUBLIC_KEY
+        host: "{{ secret('MULTIPASS_HOST') }}"
+        username: "{{ secret('MULTIPASS_SSH_USER') }}"
+        privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
+        commands:
+          - /usr/local/bin/multipass stop {{ outputs.generate_vm_name.value }} || true
+      - id: delete_vm_on_failure
+        type: io.kestra.plugin.fs.ssh.Command
+        authMethod: PUBLIC_KEY
+        host: "{{ secret('MULTIPASS_HOST') }}"
+        username: "{{ secret('MULTIPASS_SSH_USER') }}"
+        privateKey: "{{ secret('MULTIPASS_SSH_PRIVATE_KEY') }}"
+        commands:
+          - /usr/local/bin/multipass delete {{ outputs.generate_vm_name.value }} --purge || true
